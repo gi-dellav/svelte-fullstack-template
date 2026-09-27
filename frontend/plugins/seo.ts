@@ -12,10 +12,6 @@ export interface SeoPost {
 
 export interface ResolveSiteRootOptions {
   siteUrlOverride: string | undefined;
-  owner: string;
-  repo: string;
-  isUserSite: boolean;
-  hasActions: boolean;
   base: string;
 }
 
@@ -28,24 +24,13 @@ export function normalizeSiteRoot(root: string): string {
 /**
  * Resolve the absolute (or, as a last resort, path-absolute) site root used for
  * `sitemap.xml`, `rss.xml`, canonical URLs and `robots.txt`.
- * - `SITE_URL` env wins when set (include any sub-path, e.g. `https://example.com/blog/`).
- * - Else, under `GITHUB_ACTIONS`, derive the Pages URL from `owner/repo`.
- * - Else, fall back to the build `base` (correct for root-hosted previews;
- *   set `SITE_URL` for canonical sitemaps on custom hosts).
+ * - `SITE_URL` env wins when set (e.g. `https://example.com/`; on Vercel set
+ *   it to the production URL so the sitemap carries absolute URLs).
+ * - Else, fall back to the build `base` (correct for root-hosted previews).
  */
-export function resolveSiteRoot({
-  siteUrlOverride,
-  owner,
-  repo,
-  isUserSite,
-  hasActions,
-  base,
-}: ResolveSiteRootOptions): string {
+export function resolveSiteRoot({ siteUrlOverride, base }: ResolveSiteRootOptions): string {
   const override = siteUrlOverride?.trim() ?? "";
   if (override !== "") return normalizeSiteRoot(override);
-  if (hasActions && owner !== "" && repo !== "") {
-    return isUserSite ? `https://${owner}.github.io/` : `https://${owner}.github.io/${repo}/`;
-  }
   const withLeading = base.startsWith("/") ? base : `/${base}`;
   return normalizeSiteRoot(withLeading);
 }
@@ -177,8 +162,8 @@ export interface SeoPluginOptions {
  * are real build artifacts, not an out-of-band `cp`).
  */
 export function seoPlugin(options: SeoPluginOptions): Plugin {
-  const siteName = options.siteName ?? "Svelte Clean Template";
-  const siteDescription = options.siteDescription ?? "A clean static Svelte + Tailwind PWA template.";
+  const siteName = options.siteName ?? "Svelte Fullstack Template";
+  const siteDescription = options.siteDescription ?? "A fullstack Svelte + Axum template on Vercel.";
   const root = normalizeSiteRoot(options.siteRoot);
 
   return {

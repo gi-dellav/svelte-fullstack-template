@@ -20,7 +20,7 @@ export function joinBase(path: string, base: string): string {
   return `${base === "/" ? "" : base.replace(/\/$/, "")}${clean}`;
 }
 
-/** Strip the Pages sub-path (`/repo`) so routes match on `/…`; never hardcode `/`. */
+/** Strip the configured base so routes match on `/…`; never hardcode `/`. */
 export function pathWithoutBase(pathname: string, base: string = basePath()): string {
   return stripBase(pathname, base);
 }

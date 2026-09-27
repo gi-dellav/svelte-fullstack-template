@@ -11,16 +11,16 @@ import {
 
 describe("stripBase", () => {
   it("strips the base prefix", () => {
-    expect(stripBase("/repo/post/x", "/repo")).toBe("/post/x");
+    expect(stripBase("/sub/post/x", "/sub")).toBe("/post/x");
   });
 
   it("maps the bare base to root", () => {
-    expect(stripBase("/repo", "/repo")).toBe("/");
+    expect(stripBase("/sub", "/sub")).toBe("/");
   });
 
   it("leaves non-matching paths untouched", () => {
-    expect(stripBase("/other/post", "/repo")).toBe("/other/post");
-    expect(stripBase("/repo-extra", "/repo")).toBe("/repo-extra");
+    expect(stripBase("/other/post", "/sub")).toBe("/other/post");
+    expect(stripBase("/sub-extra", "/sub")).toBe("/sub-extra");
   });
 
   it("treats empty base as identity", () => {
@@ -30,12 +30,12 @@ describe("stripBase", () => {
 
 describe("pathWithoutBase", () => {
   it("accepts an injected base without touching import.meta.env", () => {
-    expect(pathWithoutBase("/repo/post/x", "/repo")).toBe("/post/x");
-    expect(pathWithoutBase("/repo", "/repo")).toBe("/");
+    expect(pathWithoutBase("/sub/post/x", "/sub")).toBe("/post/x");
+    expect(pathWithoutBase("/sub", "/sub")).toBe("/");
   });
 
   it("leaves paths outside the base untouched", () => {
-    expect(pathWithoutBase("/post/x", "/repo")).toBe("/post/x");
+    expect(pathWithoutBase("/post/x", "/sub")).toBe("/post/x");
   });
 });
 
@@ -45,20 +45,20 @@ describe("joinBase / withBase", () => {
     expect(joinBase("/post/x", "/")).toBe("/post/x");
   });
 
-  it("prefixes a Pages sub-path base", () => {
-    expect(joinBase("/", "/repo")).toBe("/repo/");
-    expect(joinBase("/post/x", "/repo")).toBe("/repo/post/x");
-    expect(joinBase("/post/x", "/repo/")).toBe("/repo/post/x");
+  it("prefixes a sub-path base", () => {
+    expect(joinBase("/", "/sub")).toBe("/sub/");
+    expect(joinBase("/post/x", "/sub")).toBe("/sub/post/x");
+    expect(joinBase("/post/x", "/sub/")).toBe("/sub/post/x");
   });
 
   it("normalizes relative paths with a leading slash", () => {
     expect(joinBase("post/x", "/")).toBe("/post/x");
-    expect(joinBase("post/x", "/repo")).toBe("/repo/post/x");
+    expect(joinBase("post/x", "/sub")).toBe("/sub/post/x");
   });
 
   it("withBase accepts an injected base", () => {
     expect(withBase("/post/x", "/")).toBe("/post/x");
-    expect(withBase("/post/x", "/repo")).toBe("/repo/post/x");
+    expect(withBase("/post/x", "/sub")).toBe("/sub/post/x");
   });
 });
 
@@ -78,10 +78,10 @@ describe("parseRoute", () => {
     expect(parseRoute("/post/a/b", "/")).toEqual({ name: "not-found", path: "/post/a/b" });
   });
 
-  it("strips the Pages base before matching", () => {
-    expect(parseRoute("/repo/", "/repo")).toEqual({ name: "home" });
-    expect(parseRoute("/repo/post/hello", "/repo")).toEqual({ name: "post", slug: "hello" });
-    expect(parseRoute("/repo/unknown", "/repo")).toEqual({ name: "not-found", path: "/unknown" });
+  it("strips the configured base before matching", () => {
+    expect(parseRoute("/sub/", "/sub")).toEqual({ name: "home" });
+    expect(parseRoute("/sub/post/hello", "/sub")).toEqual({ name: "post", slug: "hello" });
+    expect(parseRoute("/sub/unknown", "/sub")).toEqual({ name: "not-found", path: "/unknown" });
   });
 
   it("parses query strings and keeps the base-aware split consistent", () => {
@@ -89,8 +89,8 @@ describe("parseRoute", () => {
       name: "not-found",
       path: "/search?q=a%20b#top",
     });
-    expect(pathWithoutBase("/repo/search?q=x", "/repo")).toBe("/search?q=x");
-    expect(withBase(`/search?q=${encodeURIComponent("a b")}`, "/repo")).toBe("/repo/search?q=a%20b");
+    expect(pathWithoutBase("/sub/search?q=x", "/sub")).toBe("/search?q=x");
+    expect(withBase(`/search?q=${encodeURIComponent("a b")}`, "/sub")).toBe("/sub/search?q=a%20b");
   });
 });
 

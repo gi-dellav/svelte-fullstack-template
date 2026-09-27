@@ -9,14 +9,14 @@
   }
 
   const {
-    title = "Svelte Clean Template",
-    description = "A clean static Svelte + Tailwind PWA template.",
+    title = "Svelte Fullstack Template",
+    description = "A fullstack Svelte + Axum template on Vercel.",
     path,
     noindex = false,
   }: Props = $props();
 
   const fullTitle = $derived(
-    title === "Svelte Clean Template" ? title : `${title} · Svelte Clean Template`,
+    title === "Svelte Fullstack Template" ? title : `${title} · Svelte Fullstack Template`,
   );
 </script>
 
@@ -28,7 +28,7 @@
     <meta name="robots" content="noindex" />
   {/if}
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Svelte Clean Template" />
+  <meta property="og:site_name" content="Svelte Fullstack Template" />
   <meta property="og:title" content={fullTitle} />
   <meta property="og:description" content={description} />
   <meta property="og:url" content={withBase(path)} />

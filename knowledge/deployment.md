@@ -1,47 +1,53 @@
 # Deployment
 
-Static output: `bun run build` → `dist/`, deployable to any static host. GitHub Pages is wired by default.
+Primary target: **Vercel** (Docker services) — see `vercel-deploy.md`. This file covers CI, the local Docker preview, and non-Vercel static hosts.
 
-## 1. Workflows
+## 1. CI (`.github/workflows/ci.yml`)
 
-**CI** (`.github/workflows/ci.yml`) — every push to `main` + every PR: `setup-bun` → `bun install --frozen-lockfile` → `bun run check` → `bun run test` → `bun run build`. No config needed on forks.
+Every push to `main` + every PR:
 
-**Deploy** (`.github/workflows/deploy.yml`) — every push to `main` + manual dispatch (`Actions → Deploy to GitHub Pages → Run workflow`):
+1. `oven-sh/setup-bun` → `bun install --frozen-lockfile` (workdir `frontend/`)
+2. `bun run check` (svelte-check) → `bun run test` (`bun test`) → `bun run build`
+3. `rust-toolchain` (stable) → `cargo fmt --check` → `cargo clippy -- -D warnings` → `cargo test` (workdir `backend/`, Postgres service container provides `TEST_DATABASE_URL` for the parity test)
 
-1. Same install/check/test/build steps (`BASE_PATH` from repo variable `vars.BASE_PATH`; empty = auto-detect — see `architecture.md` §4).
-2. `touch dist/.nojekyll` (so `_`-prefixed bundled assets serve correctly on Pages).
-3. `configure-pages` → `upload-pages-artifact` (`path: dist`) → `deploy-pages` (env `github-pages`, `pages: write` + `id-token: write`).
-4. Concurrency group `pages`, `cancel-in-progress: false` — queued runs wait, in-progress deploys finish.
+No config needed on forks. Vercel's own Git integration builds Preview/Production deploys separately on push.
 
-## 2. One-time Pages setup
+## 2. Local Docker preview
 
-1. Use this template / fork, keeping `main`.
-2. Repo → **Settings → Pages → Build and deployment** → source **GitHub Actions**.
-3. Push to `main`. Site appears at `https://<owner>.github.io/<repo>/`.
+```bash
+cd frontend && bun run build && cd ..   # nginx image COPYs dist/
+docker compose up --build
+# frontend → http://localhost:8080, backend → http://localhost:3000/api/health
+```
+
+Services: `backend` (`backend/Dockerfile`, `:3000`, healthchecked, SQLite `DATABASE_URL` default; `backend/.env` optional) + `frontend` (`frontend/Dockerfile.vercel` + `nginx.conf`, `:8080`, waits for healthy backend). Uncomment the `db` block for local Postgres parity (see `database.md` §5). Native alternative without Docker: `cargo run` in `backend/` + `bun run dev` in `frontend/` (Vite proxies `/api` → `:3000`).
 
 ## 3. Base path overrides
 
-`vite.config.ts` derives `/<repo>/` from `GITHUB_REPOSITORY` automatically — forks deploy with zero changes. Override only when **not** on a project sub-path:
-
-- User site (`<user>.github.io`) or custom domain → repo variable `BASE_PATH=/` (Settings → Secrets and variables → Actions → Variables).
-- Other host / local sub-path check → `BASE_PATH=/my-sub-path/ bun run build`.
-
-## 4. Manual deploy (any static host)
+`frontend/vite.config.ts` defaults `base` to `/` (Vercel serves from the domain root). Override only when embedding under a sub-path:
 
 ```bash
-bun run build    # outputs to dist/
+BASE_PATH=/my-sub-path/ bun run build   # (run inside frontend/)
 ```
 
-Upload `dist/` to Netlify, Cloudflare Pages, S3, Nginx, … Note: `dist/404.html` (SPA fallback copy of `index.html`) is harmless on non-Pages hosts — plain static servers ignore it; SPA-style hosts can reuse it as the fallback route. `dist/.nojekyll` is Pages-specific; other hosts ignore it.
+PWA manifest `start_url`/`scope` follow the same `base`.
 
-Canonical URLs need the host: on GitHub Actions the Pages URL is derived automatically, but any other host needs an explicit root:
+## 4. Non-Vercel hosts
+
+Frontend-only hosts (Netlify, Cloudflare Pages, S3, Nginx, …):
 
 ```bash
-SITE_URL=https://example.com/blog/ bun run build
+cd frontend && bun run build    # outputs to frontend/dist/
 ```
 
-Without `SITE_URL`, off-CI builds emit path-rooted sitemap/RSS links (correct only when served from domain root). Custom domains also need `BASE_PATH=/` (see §3) — both vars together describe a non-Pages host.
+- Upload `frontend/dist/` as-is. `dist/404.html` (SPA fallback copy of `index.html`) is harmless — plain static servers ignore it; SPA-style hosts can reuse it as the fallback route.
+- Set the canonical root for absolute sitemap/RSS URLs:
+  ```bash
+  SITE_URL=https://example.com/ bun run build
+  ```
+  Without `SITE_URL`, builds emit path-rooted sitemap/RSS links. Combine with `BASE_PATH` when serving under a sub-path.
+- Fullstack elsewhere: run the backend image (`backend/Dockerfile`) on any container host (Fly.io, Render, Railway, …), set `VITE_API_URL=https://<backend-host>` at frontend build time and `ALLOWED_ORIGINS=https://<frontend-host>` at backend runtime.
 
 ## 5. PWA + deploy interaction
 
-The service worker + manifest are generated at build time with `start_url`/`scope` = build `base`. Custom-domain or user-site moves therefore require a rebuild with the matching `BASE_PATH`, or "Add to Home Screen" scope breaks. Workbox precaches `**/*.{js,css,html,svg,png,ico,woff2,xml,txt}` including the in-band `404.html`, `sitemap.xml`, `rss.xml` and `robots.txt`; `PwaUpdate.svelte` prompts on new versions (`registerType: "autoUpdate"`).
+The service worker + manifest are generated at build time with `start_url`/`scope` = build `base`. Sub-path moves therefore require a rebuild with the matching `BASE_PATH`, or "Add to Home Screen" scope breaks. Workbox precaches `**/*.{js,css,html,svg,png,ico,woff2,xml,txt}` including the in-band `404.html`, `sitemap.xml`, `rss.xml` and `robots.txt`; `PwaUpdate.svelte` prompts on new versions (`registerType: "autoUpdate"`).

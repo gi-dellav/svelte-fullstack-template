@@ -1,12 +1,14 @@
 # Frontend patterns
 
-How to grow this template into a full static webapp without diverging. Read
-`architecture.md` first for the router/build/base-path model. Primitives:
+How to grow this template into a full webapp without diverging. Read
+`architecture.md` first for the router/build/base-path model. All paths below
+are relative to `frontend/`. Primitives:
 
 | Need | Primitive | Test |
 |---|---|---|
 | persisted state | `src/lib/storage.ts` (pure) + `src/lib/local-store.svelte.ts` (runes) | `tests/storage.test.ts` |
 | async fetch | `src/lib/async.ts` (`AsyncState`, `fetchJson`, `toErrorMessage`) | `tests/async.test.ts` |
+| backend calls | `src/lib/api.ts` (`API_URL`, `apiUrl`) + `async.ts` | `tests/api.test.ts` |
 | form validation | `src/lib/form.ts` (`required`, `emailField`, `minLength`, `validateAll`) | `tests/form.test.ts` |
 | query/hash parsing | `parseQuery` / `parseHash` in `src/lib/router.ts` | `tests/router.test.ts` |
 
@@ -15,7 +17,7 @@ Test pyramid: pure logic in `bun test`; components via `bun run check` +
 
 ## 1. Add a route
 
-Six mechanical steps; do all six or the route 404s under Pages.
+Six mechanical steps; do all six or the route 404s on Vercel.
 
 1. Extend `Route` in `src/lib/router.ts`:
    ```ts
@@ -36,12 +38,12 @@ Six mechanical steps; do all six or the route 404s under Pages.
      <About />
    ```
 4. Link with `withBase()`: `<a href={withBase("/about")}>About</a>` — never
-   hardcode `/`-rooted hrefs (Pages sub-path breaks).
+   hardcode `/`-rooted hrefs (a non-root `BASE_PATH` build breaks).
 5. Add a `parseRoute` case in `tests/router.test.ts` — route without a test
    is a regression waiting for a fork.
 6. Rebuild: `bun run check && bun run test && bun run build`. Deep links
-   (`/<repo>/about`) resolve via the in-band `dist/404.html` fallback — no
-   extra config.
+   (`/about`) resolve via the Vercel `/(.*) → frontend` rewrite (plus the
+   in-band `dist/404.html` fallback for plain-static hosts) — no extra config.
 
 Parametrized routes follow the existing `post` shape:
 `/post/<slug>` → `{ name: "post", slug }` with `decodeURIComponent` on the
@@ -172,7 +174,7 @@ state write is guarded:
   onMount(() => {
     let cancelled = false;
     state = loadingState();
-    // Local static JSON: withBase keeps the Pages sub-path working.
+    // Local static JSON: withBase keeps a non-root BASE_PATH build working.
     fetchJson<Item[]>(withBase("/data/items.json"))
       .then((data) => {
         if (!cancelled) state = okState(data);
@@ -213,9 +215,53 @@ Rules:
   global `fetch` (`tests/async.test.ts`). Do not test rendering states —
   keep the wrapper thin and test your mapping logic instead.
 
+### Backend calls: `apiUrl()` + the same fetch shape
+
+`src/lib/api.ts` resolves backend URLs: `apiUrl("/api/health")` returns the
+same-origin path in dev (Vite proxies `/api` → Axum `:3000`) and on Vercel
+(`vercel.json` rewrites `/api/*` → backend service), or
+`VITE_API_URL + path` for split-domain deploys. Live example in
+`src/App.svelte` (health check button); recipe:
+
+```svelte
+<script lang="ts">
+  import { apiUrl } from "../lib/api";
+  import {
+    errorState, fetchJson, idleState, loadingState, okState,
+    toErrorMessage, type AsyncState,
+  } from "../lib/async";
+
+  interface Health { status: string; }
+  let health = $state<AsyncState<Health>>(idleState());
+
+  function loadHealth() {
+    let cancelled = false;
+    health = loadingState();
+    fetchJson<Health>(apiUrl("/api/health"))
+      .then((data) => { if (!cancelled) health = okState(data); })
+      .catch((error: unknown) => { if (!cancelled) health = errorState(toErrorMessage(error)); });
+    return () => { cancelled = true; };
+  }
+</script>
+```
+
+Rules:
+
+- Always go through `apiUrl()` for `/api/*` — never hardcode the backend
+  origin (breaks previews) and never use `withBase()` (API paths are not
+  base-prefixed static assets).
+- POSTs: `fetchJson<Reply>(apiUrl("/api/echo"), { method: "POST", headers:
+  { "Content-Type": "application/json" }, body: JSON.stringify({ message }) })`.
+  Backend errors arrive as `{ "error": "…" }` with non-2xx status —
+  `fetchJson` throws `Request failed: 422 …`; parse the envelope only if you
+  need the message verbatim.
+- Dev needs the backend running (`cargo run` in `backend/`) or calls fail
+  fast with "Failed to fetch" — surface that via the `error` branch, not a
+  blank panel.
+
 ## 5. Form pattern: markup + validation
 
-CSS: `.form` / `.field` / `.label` / `.input` / `.form-error` (`src/app.css`,
+CSS: `.form` / `.field` / `.label` / `.input` / `.form-error` (`frontend/src/app.css`,
 documented in `DESIGN.md` §4). Logic: `src/lib/form.ts` (`required`,
 `emailField`, `minLength`, `validateAll`). Full-accessible example:
 
@@ -339,6 +385,6 @@ const hash = currentHash();
 
 Pure helpers for tests: `parseQuery("?q=a%20b")`, `parseHash("#top")`.
 `withBase` preserves both — existing test in `tests/router.test.ts` pins
-`withBase("/search?q=…", "/repo")`. Never hand-concatenate `?`/`#` onto a
+`withBase("/search?q=…", "/sub")`. Never hand-concatenate `?`/`#` onto a
 `withBase()` result that already carries them; use `URLSearchParams` to
 compose, then `withBase`.

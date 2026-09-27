@@ -5,7 +5,7 @@ import GithubSlugger from "github-slugger";
 import { copyFileSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 
-/** Placeholder replaced at runtime with `import.meta.env.BASE_URL` (Pages sub-path aware). */
+/** Placeholder replaced at runtime with `import.meta.env.BASE_URL` (base-path aware). */
 export const BASE_PLACEHOLDER = "__BASE__";
 
 export function isExternalUrl(url: string): boolean {
@@ -21,7 +21,7 @@ export function isExternalUrl(url: string): boolean {
 }
 
 /**
- * Rewrite asset/link URLs so they work under a GitHub Pages sub-path.
+ * Rewrite asset/link URLs so they work under a non-root base path.
  * - `/foo.png`            -> `__BASE__foo.png` (root-absolute must be base-prefixed)
  * - `./foo.png`, `foo.png` -> `__BASE__content/<slug>/foo.png`
  *   (convention: colocated asset lives in `public/content/<slug>/foo.png`)
@@ -141,8 +141,9 @@ export function mdPlugin(): Plugin {
       return { code, map: null };
     },
     closeBundle() {
-      // GitHub Pages SPA fallback: serve the app shell for deep links like /repo/post/<slug>.
-      // Done in-band so Workbox precaches 404.html (a post-build CI `cp` would miss the manifest).
+      // SPA fallback: serve the app shell for deep links like /post/<slug>.
+      // Done in-band so Workbox precaches 404.html (a post-build `cp` would miss the manifest).
+      // Vercel uses `vercel.json` rewrites for the same fallback in production.
       const outDir = this.environment?.config.build.outDir ?? "dist";
       const index = join(outDir, "index.html");
       const fallback = join(outDir, "404.html");

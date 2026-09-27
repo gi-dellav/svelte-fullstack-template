@@ -1,0 +1,55 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      PORT: "3000"
+      RUST_LOG: info
+      # SQLite file lives inside the container (ephemeral — fine for previews).
+      # For Postgres instead: set DATABASE_URL=postgres://postgres:postgres@db:5432/app
+      # and uncomment the `db` service + depends_on below.
+      DATABASE_URL: "sqlite://./dev.db?mode=rwc"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    # Uncomment for local Postgres parity (see knowledge/database.md §5):
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+  # Local Postgres (optional — uncomment with the backend depends_on above):
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #     POSTGRES_DB: app
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres -d app"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.vercel
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+# Uncomment with the `db` service above:
+# volumes:
+#   pgdata:

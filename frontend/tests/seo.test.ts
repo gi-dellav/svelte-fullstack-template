@@ -12,7 +12,7 @@ import {
   type SeoPost,
 } from "../plugins/seo.js";
 
-const root = "https://owner.github.io/repo/";
+const root = "https://example.com/";
 
 describe("normalizeSiteRoot", () => {
   it("ensures a trailing slash", () => {
@@ -27,49 +27,24 @@ describe("resolveSiteRoot", () => {
     expect(
       resolveSiteRoot({
         siteUrlOverride: "https://example.com/blog",
-        owner: "owner",
-        repo: "repo",
-        isUserSite: false,
-        hasActions: true,
-        base: "/repo/",
+        base: "/",
       }),
     ).toBe("https://example.com/blog/");
   });
 
-  it("derives the Pages URL on CI", () => {
+  it("falls back to the build base when SITE_URL is unset", () => {
     expect(
       resolveSiteRoot({
         siteUrlOverride: undefined,
-        owner: "owner",
-        repo: "repo",
-        isUserSite: false,
-        hasActions: true,
-        base: "/repo/",
-      }),
-    ).toBe("https://owner.github.io/repo/");
-    expect(
-      resolveSiteRoot({
-        siteUrlOverride: undefined,
-        owner: "owner",
-        repo: "owner.github.io",
-        isUserSite: true,
-        hasActions: true,
-        base: "/",
-      }),
-    ).toBe("https://owner.github.io/");
-  });
-
-  it("falls back to the build base off CI", () => {
-    expect(
-      resolveSiteRoot({
-        siteUrlOverride: undefined,
-        owner: "",
-        repo: "",
-        isUserSite: false,
-        hasActions: false,
         base: "/",
       }),
     ).toBe("/");
+    expect(
+      resolveSiteRoot({
+        siteUrlOverride: "   ",
+        base: "/sub/",
+      }),
+    ).toBe("/sub/");
   });
 });
 

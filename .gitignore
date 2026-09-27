@@ -81,6 +81,15 @@ typings/
 .env
 .env.test
 
+# Rust / Cargo (target ignored; Cargo.lock COMMITTED for the backend binary
+# so Docker/Vercel builds are reproducible)
+target/
+# Local SQLite dev database (created by `cargo run` via mode=rwc).
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 

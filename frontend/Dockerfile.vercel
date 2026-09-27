@@ -1,0 +1,18 @@
+# Static-file service for the Svelte frontend.
+# Vercel builds `frontend/` with Bun and serves `dist/` (see root vercel.json
+# `services.frontend`). This Dockerfile exists so the same frontend can also
+# run anywhere Docker runs (local preview, Fly.io, plain nginx host).
+#
+# Build locally:
+#   docker build -f frontend/Dockerfile.vercel -t fullstack-frontend ./frontend
+#   docker run -p 8080:80 fullstack-frontend
+#
+# NOTE: for the build args below to work, build with context = frontend/
+# (Vercel service root) so `dist/` resolves. Run `bun run build` first when
+# building by hand — Vercel runs the buildCommand for you.
+
+FROM nginx:alpine
+COPY dist/ /usr/share/nginx/html/
+# SPA fallback: deep links like /post/<slug> serve index.html.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80

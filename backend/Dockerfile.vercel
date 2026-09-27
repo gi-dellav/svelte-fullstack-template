@@ -1,0 +1,24 @@
+# Vercel builds this file as an autoscaling Function on Fluid compute
+# (see https://vercel.com/docs/functions/container-images).
+# Same Axum binary as local Docker — it just listens on Vercel's $PORT.
+# Must be small + fast-booting: single binary, no shell init.
+
+FROM rust:1.93-slim AS build
+WORKDIR /app
+COPY Cargo.toml Cargo.lock* ./
+COPY src ./src
+COPY migrations ./migrations
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release && cp target/release/backend /backend
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /backend /backend
+# No EXPOSE/HEALTHCHECK/curl here: Vercel drives health via $PORT traffic
+# and scale-in sends SIGTERM (handled with graceful shutdown in main.rs).
+# NOTE: the container filesystem is ephemeral — SQLite created here would
+# vanish on scale-in. On Vercel always set DATABASE_URL to Postgres
+# (see knowledge/database.md §5) or leave it unset (notes → 503).
+CMD ["/backend"]
