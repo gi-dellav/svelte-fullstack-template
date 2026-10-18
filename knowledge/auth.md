@@ -12,9 +12,9 @@ Deliberately docs-only: auth is the easiest code to get subtly wrong and the har
 
 Default for this template's shape (same domain, Svelte SPA): **cookie sessions**. Only reach for JWT when a non-browser client forces you.
 
-## 2. Cookie sessions (recommended recipe)
+## 2. Cookie sessions (default recipe)
 
-**Crates:** `tower-sessions` + `async-sqlx-session` (backs the session store with the existing `AnyPool` — same SQLite/Postgres portability as `database.md`), `argon2` (password hashing). **No new migrations framework:** one portable migration:
+**Crates:** `tower-sessions` (middleware + `Session` extractor), `tower-sessions-sqlx-store` (session store backed by the pool — concrete `SqliteStore`/`PostgresStore`, **not** `AnyPool`; see the branching note), `argon2` (password hashing), `time` (session `Expiry`), `tower_governor` (rate-limiting `/login` + `/signup`). **No new migrations framework:** one portable migration:
 
 ```sql
 -- backend/migrations/0002_sessions.sql (common subset: TEXT keys only)
@@ -31,18 +31,32 @@ CREATE TABLE users (
 );
 ```
 
-**Wiring sketch** (`lib.rs`): build the session store from the pool, fail startup loudly when the pool is `None` (unlike notes, auth without a store is a security hole — `expect` here, don't `503`):
+**Wiring sketch** (`lib.rs`): `tower-sessions-sqlx-store` needs a **concrete** `SqlitePool`/`PgPool`, but `AppState` holds a shared `AnyPool` (`database.md` §2). `AnyPool` exposes no driver variant to match on, so **branch on the connection URL** and open the matching pool. The two stores are distinct types (`SessionManagerLayer<PostgresStore>` ≠ `<SqliteStore>`), so build *and* apply the layer inside each `match` arm. Fail startup loudly when the DB is disabled — unlike notes, auth without a store is a security hole (`expect` here, don't `503`):
 
 ```rust
 use tower_sessions::{Expiry, SessionManagerLayer, cookie::SameSite};
+use tower_sessions_sqlx_store::{PostgresStore, SqliteStore};
 
-let session_store = async_sqlx_session::SqliteSessionStore::from_client(pool.clone());
-// ... or PostgresSessionStore when on DATABASE_URL=postgres://…
-let session_layer = SessionManagerLayer::new(session_store)
-    .with_secure(true)              // __Host- cookies only over HTTPS (prod)
-    .with_same_site(SameSite::Lax)  // enough same-origin; Strict breaks top-level login redirects
-    .with_expiry(Expiry::OnInactivity(time::Duration::days(7)));
+let url = database_url().expect("auth requires DATABASE_URL"); // None = disabled
+let router = match url.split(':').next().unwrap_or("") {
+    "postgres" | "postgresql" => router.layer(
+        SessionManagerLayer::new(PostgresStore::new(sqlx::PgPool::connect(&url).await?))
+            .with_secure(true)
+            .with_same_site(SameSite::Lax)
+            .with_expiry(Expiry::OnInactivity(time::Duration::days(7))),
+    ),
+    _ => router.layer(
+        SessionManagerLayer::new(SqliteStore::new(sqlx::SqlitePool::connect(&url).await?))
+            .with_secure(true)
+            .with_same_site(SameSite::Lax)
+            .with_expiry(Expiry::OnInactivity(time::Duration::days(7))),
+    ),
+};
+// The builder chain duplicates per arm — wrap it in a small `fn` per store type
+// if you want it DRY; a generic helper won't work (closure can't be generic).
 ```
+
+> **`AnyPool` caveat:** the session store takes a concrete pool, so it opens a **second** pool separate from the shared `AnyPool`. Either accept the extra pool or, if you want one pool, change `AppState` to hold a `Sqlite(Pool)/Postgres(Pool)` enum and hand the matching variant to the store.
 
 **Routes** (all under `/api/auth/*`, same error envelope):
 
